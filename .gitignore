@@ -1,0 +1,16 @@
+
+#eclipse stuff
+.settings/
+.classpath
+.project
+bin/
+
+#libraries
+lib/
+
+#builds
+build/
+lBORC.jar
+
+#doxygen
+javadoc/

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="lBORC" default="jar" basedir=".">
+	
+	<property name="src.dir" value="src"/>
+	<property name="build.dir" value="build"/>
+	<property name="javadoc.dir" value="javadoc"/>
+	<property name="jar.dir" value="."/>
+	<property name="jar.filename" value="${jar.dir}/${ant.project.name}.jar"/>
+
+	<tstamp>
+		<format property="TODAY" pattern="yyyy-MM-dd HH:mm:ss"/>
+	</tstamp>
+
+	
+	<path id="project.classpath" >
+		<pathelement location="${build.dir}"/>
+	</path>
+	
+	<target name="compile" description="Compile library.">
+		<mkdir dir="${build.dir}"/>
+		<javac srcdir="${src.dir}" destdir="${build.dir}"
+			classpathref="project.classpath"
+			debug="true" deprecation="true"
+			includeantruntime="false"/>
+	</target>
+		
+	<target name="jar" depends="compile" description="Create .jar file.">
+		<jar destfile="${jar.filename}" basedir="${build.dir}" includes="**/*.class">
+
+			<manifest>
+				<attribute name="Built-By" value="${user.name}"/>
+				<attribute name="Built-Date" value="${TODAY}"/>
+			</manifest>
+
+			<metainf dir="." includes="COPYING,README"/>
+		</jar>
+	</target>
+
+	<target name="javadoc" description="Create Javadocs for lBORC (Requires Javadoc 1.4+)">
+		<mkdir dir="${javadoc.dir}"/>
+		<javadoc destdir="${javadoc.dir}" additionalparam="-J-Dorg.apache.commons.attributes.javadoc.CATaglet.sources=${basedir}">
+			<fileset dir="${src.dir}" includes="**/*.java"/>
+		</javadoc>
+	</target>
+	
+	<target name="clean" description="Clean build products.">
+		<delete dir="${build.dir}"/>
+		<delete dir="${javadoc.dir}"/>
+		<delete file="${jar.filename}"/>
+	</target>
+	
+	<target name="rebuild" depends="clean, jar" description="Clean and build products." />
+</project>
