@@ -217,6 +217,46 @@ public class RConnection
 		sendPacketNonBlocking(packet);
 	}
 	
+	public void setMapExclusions(List<String> maps) throws RConnectionException
+	{
+		StringBuffer mapList = new StringBuffer();
+		int i=0;
+		for(String map : maps)
+		{
+			if(i++ != 0)
+				mapList.append(" ");
+			mapList.append(map);
+		}
+		
+		byte[] sendBuf = new byte[5+password.length()+" setadmindvar playlist_excludeMap \"".length()+mapList.toString().length()+2]; // ....PASSWORD  setadmindvar playlist_excludeMap "map1 map2".
+		i=0;
+		sendBuf[i++] = sendBuf[i++] = sendBuf[i++] = sendBuf[i++] = (byte)0xff;
+		sendBuf[i++] = (byte)0x00;
+		for(int j=0;j<password.length();++j)
+		{
+			sendBuf[i++] = (byte)password.charAt(j);
+		}
+		
+		String cmd = " setadmindvar playlist_excludeMap \"";
+		for(int j=0;j<cmd.length();++j)
+		{
+			sendBuf[i++] = (byte)cmd.charAt(j);
+		}
+		
+		for(int j=0;j<mapList.toString().length();++j)
+		{
+			sendBuf[i++] = (byte)mapList.toString().charAt(j);
+		}
+		
+		sendBuf[i++] = '\"';
+		sendBuf[i++] = (byte)0x00;
+		
+		
+		DatagramPacket packet = new DatagramPacket(sendBuf, sendBuf.length, serverAddress, serverPort);
+
+		sendPacketNonBlocking(packet);
+	}
+	
 	private String sendPacket(DatagramPacket packet) throws RConnectionException
 	{
 		DatagramSocket dSocket = null;
