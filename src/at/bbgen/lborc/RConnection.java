@@ -27,6 +27,8 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 /**
  * BOServerWorker sends teamStatus requests to the BO server.<br>
@@ -55,6 +57,10 @@ public class RConnection
 		this.password = password;
 		this.connectionTimeout = connectionTimeout;
 		generateTeamStatusPackage();
+		sendTimer = null;
+		sendPacketsWaiting = new LinkedList<DatagramPacket>();
+		sendPWLock = new Object();
+		enableTimer();
 	}
 	
 	/**
@@ -117,7 +123,7 @@ public class RConnection
 		return retList;
 	}
 	
-	public void sendGlobalMessage(String message) throws RConnectionException
+	public void sendGlobalMessage(String message)
 	{
 		byte[] sendBuf = new byte[5+password.length()+7+message.length()+1]; // ....PASSWORD say "message".
 		int i=0;
@@ -148,7 +154,7 @@ public class RConnection
 		sendPacketNonBlocking(packet);
 	}
 	
-	public void sendPrivateMessage(String message, int playerID) throws RConnectionException
+	public void sendPrivateMessage(String message, int playerID)
 	{
 		byte[] sendBuf = new byte[5+password.length()+6+Integer.toString(playerID).length()+2+message.length()+2]; // ....PASSWORD tell ID "message".
 		int i=0;
@@ -186,7 +192,7 @@ public class RConnection
 		sendPacketNonBlocking(packet);
 	}
 	
-	public void loadPlaylist(int playlist) throws RConnectionException
+	public void loadPlaylist(int playlist)
 	{
 		byte[] sendBuf = new byte[5+password.length()+24+Integer.toString(playlist).length()+2]; // ....PASSWORD tell ID "message".
 		int i=0;
@@ -217,7 +223,7 @@ public class RConnection
 		sendPacketNonBlocking(packet);
 	}
 	
-	public void setMapExclusions(List<String> maps) throws RConnectionException
+	public void setMapExclusions(List<String> maps)
 	{
 		StringBuffer mapList = new StringBuffer();
 		int i=0;
@@ -297,20 +303,11 @@ public class RConnection
 		return retString.toString();
 	}
 	
-	private void sendPacketNonBlocking(DatagramPacket packet) throws RConnectionException
-	{
-		DatagramSocket dSocket = null;
-		try
+	private void sendPacketNonBlocking(DatagramPacket packet)
+	{		
+		synchronized(sendPWLock)
 		{
-			dSocket = new DatagramSocket();
-			dSocket.setSoTimeout(connectionTimeout);
-			dSocket.send(packet);
-		} catch (SocketException e)
-		{
-			throw new RConnectionException("Error while trying to send package: "+e.getMessage());
-		} catch (IOException e)
-		{
-			throw new RConnectionException("Error while trying to send package: "+e.getMessage());
+			sendPacketsWaiting.add(packet);
 		}
 	}
 	
@@ -335,7 +332,106 @@ public class RConnection
 		}
 		sendTeamStatusPackage[i++] = 0x00;
 	}
+	
+	public void shutdown()
+	{
+		shutdown(true);
+	}
+	
+	public void shutdown(boolean fastShutdown)
+	{
+		disableTimer();
+		if(fastShutdown)
+			return;
+		
+		DatagramPacket packetToSend = null;
+		synchronized(sendPWLock)
+		{
+			if(sendPacketsWaiting.size() < 5)
+			{
+				while(!sendPacketsWaiting.isEmpty())
+				{
+					packetToSend = sendPacketsWaiting.getFirst();
+					sendPacketsWaiting.removeFirst();
+					DatagramSocket dSocket = null;
+					try
+					{
+						dSocket = new DatagramSocket();
+						dSocket.setSoTimeout(connectionTimeout);
+						dSocket.send(packetToSend);
+					} catch (SocketException e)
+					{
+						//throw new RConnectionException("Error while trying to send package: "+e.getMessage());
+					} catch (IOException e)
+					{
+						//throw new RConnectionException("Error while trying to send package: "+e.getMessage());
+					}
+					if(!sendPacketsWaiting.isEmpty())
+					{
+						try
+						{
+							Thread.sleep(connectionTimeout);
+						} catch (InterruptedException e)
+						{
+							//log4j.warn("Error while trying to sleep for "+connectionTimeout+" milliseconds: "+e.getMessage());
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	private void enableTimer()
+	{
+		sendTimer = new Timer();
+		
+		sendTimer.scheduleAtFixedRate(new TimerTask()
+		{
+			public void run()
+			{
+				sendTrigger();
+			}
+		}, connectionTimeout, connectionTimeout);
+	}
+	
+	private void disableTimer()
+	{
+		if(sendTimer != null)
+			sendTimer.cancel();
+	}
+	
+	private void sendTrigger()
+	{
+		DatagramPacket packetToSend = null;
+		synchronized(sendPWLock)
+		{
+			if(sendPacketsWaiting.isEmpty())
+				return;
 			
+			packetToSend = sendPacketsWaiting.getFirst();
+
+			sendPacketsWaiting.removeFirst();
+		}
+		
+		DatagramSocket dSocket = null;
+		try
+		{
+			dSocket = new DatagramSocket();
+			dSocket.setSoTimeout(connectionTimeout);
+			dSocket.send(packetToSend);
+		} catch (SocketException e)
+		{
+			//throw new RConnectionException("Error while trying to send package: "+e.getMessage());
+		} catch (IOException e)
+		{
+			//throw new RConnectionException("Error while trying to send package: "+e.getMessage());
+		}
+	}
+			
+	private Timer sendTimer;
+	private LinkedList<DatagramPacket> sendPacketsWaiting;
+	private Object sendPWLock;
+	
 	private byte[] sendTeamStatusPackage;
 	private static final int BUFFERSIZE = 2048;
 	private String password;
